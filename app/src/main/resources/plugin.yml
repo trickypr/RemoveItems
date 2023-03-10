@@ -1,0 +1,12 @@
+name: RemoveItems
+version: 1.0.0
+main: com.trickypr.removeitems.Plugin
+description: Removes specific items
+author: TrickyPR
+api-version: 1.19
+
+commands:
+  removeitems:
+      description: Reloads removeitems config
+      usage: /removeitems
+      permissions: removeitems.reload
