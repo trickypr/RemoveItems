@@ -3,19 +3,26 @@
  */
 package com.trickypr.removeitems;
 
-import org.bukkit.Bukkit;
+import com.google.common.collect.Multimap;
 import org.bukkit.Material;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
 
 public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
     FileConfiguration config = getConfig();
@@ -38,7 +45,7 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
 
         // Configure enchantment levels
         config.addDefault("items.max_level", 5);
-        config.addDefault("items.max_effect", 0);
+        config.addDefault("items.max_attribute", 0);
 
         config.options().copyDefaults(true);
         this.saveConfig();
@@ -52,8 +59,6 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         ArrayList<String> bannedItems = (ArrayList<String>) config.get("banned_items");
 
         for (String bannedItem : bannedItems) {
-            if (item == null) continue;
-
             if (item.getType().getKey().asString().equals(bannedItem)) {
                 return true;
             }
@@ -62,17 +67,103 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return false;
     }
 
-    @EventHandler
-    public void onInventoryOpenEvent(InventoryOpenEvent event) {
-        ItemStack[] contents = event.getInventory().getContents();
+    protected boolean shouldModifyEnchantments(ItemStack item) {
+        Map<Enchantment, Integer> enchantments = item.getEnchantments();
+        Integer maxEnchantLevel = (Integer) config.get("items.max_level");
 
-        for (int i = 0; i < contents.length; i++) {
-            ItemStack item = contents[i];
-            if (shouldRemove(item)) {
-                contents[i] = new ItemStack(Material.AIR);
+        for (Enchantment enchantment : enchantments.keySet()) {
+            Integer level = enchantments.get(enchantment);
+            if (level > maxEnchantLevel) return true;
+        }
+
+        return false;
+    }
+
+    protected boolean shouldModifyAttributes(ItemStack item) {
+        Multimap<Attribute, AttributeModifier> attributes = item.getItemMeta().getAttributeModifiers();
+        Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
+
+        if (attributes == null) return false;
+
+        for (Attribute attribute : attributes.keySet()) {
+            Collection<AttributeModifier> values = attributes.get(attribute);
+            for (AttributeModifier modifier : values) {
+                if (modifier.getAmount() > maxAttributeLevel.doubleValue()) return true;
             }
         }
 
+        return false;
+    }
+
+    protected ItemStack correctEnchantments(ItemStack item) {
+        Map<Enchantment, Integer> enchantments = item.getEnchantments();
+        Integer maxEnchantLevel = (Integer) config.get("items.max_level");
+
+        for (Enchantment enchantment : enchantments.keySet()) {
+            Integer level = enchantments.get(enchantment);
+            if (level > maxEnchantLevel) {
+                item.addUnsafeEnchantment(enchantment, maxEnchantLevel);
+            }
+        }
+
+        return item;
+    }
+
+    protected ItemStack correctAttributes(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        Multimap<Attribute, AttributeModifier> attributes = meta.getAttributeModifiers();
+        Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
+
+        if (attributes == null) return item;
+
+        for (Attribute attribute : attributes.keySet()) {
+            Collection<AttributeModifier> values = attributes.get(attribute);
+
+            for (AttributeModifier modifier : values) {
+                if (modifier.getAmount() <= maxAttributeLevel.doubleValue())
+                    continue;
+
+                AttributeModifier newModifier = new AttributeModifier(modifier.getUniqueId(), modifier.getName(), maxAttributeLevel.doubleValue(), modifier.getOperation(), modifier.getSlot());
+                meta.removeAttributeModifier(attribute, modifier);
+                meta.addAttributeModifier(attribute, newModifier);
+            }
+        }
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public ItemStack[] refreshItemStack(ItemStack[] contents) {
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack item = contents[i];
+
+            if (item == null) continue;
+
+            if (shouldRemove(item)) {
+                contents[i] = new ItemStack(Material.AIR);
+            }
+
+            if (shouldModifyEnchantments(item)) {
+                contents[i] = correctEnchantments(item);
+            }
+
+            if (shouldModifyAttributes(item)) {
+                contents[i] = correctAttributes(item);
+            }
+        }
+
+        return contents;
+    }
+
+    @EventHandler
+    public void onJoinEvent(PlayerJoinEvent event) {
+        ItemStack[] contents = refreshItemStack(event.getPlayer().getInventory().getContents());
+        event.getPlayer().getInventory().setContents(contents);
+    }
+
+    @EventHandler
+    public void onInventoryOpenEvent(InventoryOpenEvent event) {
+        ItemStack[] contents = refreshItemStack(event.getInventory().getContents());
         event.getInventory().setContents(contents);
     }
 }
