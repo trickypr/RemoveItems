@@ -55,9 +55,7 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         this.reloadConfig();
     }
 
-    protected boolean shouldRemove(ItemStack item) {
-        ArrayList<String> bannedItems = (ArrayList<String>) config.get("banned_items");
-
+    protected boolean shouldRemove(ItemStack item, ArrayList<String> bannedItems) {
         for (String bannedItem : bannedItems) {
             if (item.getType().getKey().asString().equals(bannedItem)) {
                 return true;
@@ -67,9 +65,8 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return false;
     }
 
-    protected boolean shouldModifyEnchantments(ItemStack item) {
+    protected boolean shouldModifyEnchantments(ItemStack item, Integer maxEnchantLevel) {
         Map<Enchantment, Integer> enchantments = item.getEnchantments();
-        Integer maxEnchantLevel = (Integer) config.get("items.max_level");
 
         for (Enchantment enchantment : enchantments.keySet()) {
             Integer level = enchantments.get(enchantment);
@@ -79,9 +76,8 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return false;
     }
 
-    protected boolean shouldModifyAttributes(ItemStack item) {
+    protected boolean shouldModifyAttributes(ItemStack item, Integer maxAttributeLevel) {
         Multimap<Attribute, AttributeModifier> attributes = item.getItemMeta().getAttributeModifiers();
-        Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
 
         if (attributes == null) return false;
 
@@ -95,9 +91,8 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return false;
     }
 
-    protected ItemStack correctEnchantments(ItemStack item) {
+    protected ItemStack correctEnchantments(ItemStack item, Integer maxEnchantLevel) {
         Map<Enchantment, Integer> enchantments = item.getEnchantments();
-        Integer maxEnchantLevel = (Integer) config.get("items.max_level");
 
         for (Enchantment enchantment : enchantments.keySet()) {
             Integer level = enchantments.get(enchantment);
@@ -109,10 +104,9 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return item;
     }
 
-    protected ItemStack correctAttributes(ItemStack item) {
+    protected ItemStack correctAttributes(ItemStack item, Integer maxAttributeLevel) {
         ItemMeta meta = item.getItemMeta();
         Multimap<Attribute, AttributeModifier> attributes = meta.getAttributeModifiers();
-        Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
 
         if (attributes == null) return item;
 
@@ -133,22 +127,26 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         return item;
     }
 
-    public ItemStack[] refreshItemStack(ItemStack[] contents) {
+    public ItemStack[] enforceItemRestrictions(ItemStack[] contents) {
+        Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
+        Integer maxEnchantLevel = (Integer) config.get("items.max_level");
+        ArrayList<String> bannedItems = (ArrayList<String>) config.get("banned_items");
+
         for (int i = 0; i < contents.length; i++) {
             ItemStack item = contents[i];
 
             if (item == null) continue;
 
-            if (shouldRemove(item)) {
+            if (shouldRemove(item, bannedItems)) {
                 contents[i] = new ItemStack(Material.AIR);
             }
 
-            if (shouldModifyEnchantments(item)) {
-                contents[i] = correctEnchantments(item);
+            if (shouldModifyEnchantments(item, maxEnchantLevel)) {
+                contents[i] = correctEnchantments(item, maxEnchantLevel);
             }
 
-            if (shouldModifyAttributes(item)) {
-                contents[i] = correctAttributes(item);
+            if (shouldModifyAttributes(item, maxAttributeLevel)) {
+                contents[i] = correctAttributes(item, maxAttributeLevel);
             }
         }
 
@@ -157,13 +155,13 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
 
     @EventHandler
     public void onJoinEvent(PlayerJoinEvent event) {
-        ItemStack[] contents = refreshItemStack(event.getPlayer().getInventory().getContents());
+        ItemStack[] contents = enforceItemRestrictions(event.getPlayer().getInventory().getContents());
         event.getPlayer().getInventory().setContents(contents);
     }
 
     @EventHandler
     public void onInventoryOpenEvent(InventoryOpenEvent event) {
-        ItemStack[] contents = refreshItemStack(event.getInventory().getContents());
+        ItemStack[] contents = enforceItemRestrictions(event.getInventory().getContents());
         event.getInventory().setContents(contents);
     }
 }
