@@ -19,16 +19,18 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 
 public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
     FileConfiguration config = getConfig();
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public boolean onCommand(CommandSender sender, @NotNull Command command, @NotNull String label, String[] args) {
         sender.sendMessage("Reloading config");
 
         reloadConfig();
@@ -51,11 +53,15 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
         this.saveConfig();
 
         getServer().getPluginManager().registerEvents(this, this);
-        getCommand("removeitems").setExecutor(this);
+        Objects.requireNonNull(getCommand("removeitems")).setExecutor(this);
         this.reloadConfig();
     }
 
     protected boolean shouldRemove(ItemStack item, ArrayList<String> bannedItems) {
+        // Items without materials can cause server crashes, they should be removed
+        //noinspection ConstantValue
+        if (item.getType() == null) { return true; }
+
         for (String bannedItem : bannedItems) {
             if (item.getType().getKey().asString().equals(bannedItem)) {
                 return true;
@@ -77,6 +83,8 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
     }
 
     protected boolean shouldModifyAttributes(ItemStack item, Integer maxAttributeLevel) {
+        if (item == null || item.getItemMeta() == null) return false;
+
         Multimap<Attribute, AttributeModifier> attributes = item.getItemMeta().getAttributeModifiers();
 
         if (attributes == null) return false;
@@ -130,6 +138,7 @@ public class Plugin extends JavaPlugin implements Listener, CommandExecutor {
     public ItemStack[] enforceItemRestrictions(ItemStack[] contents) {
         Integer maxAttributeLevel = (Integer) config.get("items.max_attribute");
         Integer maxEnchantLevel = (Integer) config.get("items.max_level");
+        //noinspection unchecked
         ArrayList<String> bannedItems = (ArrayList<String>) config.get("banned_items");
 
         for (int i = 0; i < contents.length; i++) {

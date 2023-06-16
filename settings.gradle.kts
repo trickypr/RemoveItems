@@ -8,4 +8,4 @@
  */
 
 rootProject.name = "RemoveItems"
-include("app")
+include("removeitems")

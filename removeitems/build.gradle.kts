@@ -6,6 +6,8 @@
  * User Manual available at https://docs.gradle.org/7.3/userguide/building_java_projects.html
  */
 
+project.version = "1.0.1"
+
 plugins {
     java
     id("xyz.jpenilla.run-paper") version "2.0.0"
